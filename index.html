@@ -257,6 +257,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 /* Carried-over badge */
 .carryover-badge{font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:1px 5px;flex-shrink:0}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -295,12 +298,28 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div class="streak-pill">🔥 <span class="streak-num" id="streakNum">0</span> <span style="font-size:12px">일 연속</span></div>
   </div>
 
-  <!-- 자동저장 바 -->
-  <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 14px;margin-bottom:1rem;flex-wrap:wrap">
+  <!-- 저장 바 -->
+  <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 14px;margin-bottom:0.5rem;flex-wrap:wrap">
     <button id="autoSaveBtn" onclick="connectAutoSave()" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap">
-      💾 폴더 자동저장 연결
+      💾 로컬 자동저장
     </button>
     <span id="syncStatus" style="font-size:12px;color:var(--text3);flex:1">연결하면 CSV + MD 파일로 자동 저장돼요</span>
+    <div id="fbStatus"></div>
+  </div>
+  <!-- Firebase 설정 카드 -->
+  <div id="fbSetupCard" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">🔥 Firebase 동기화 설정</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:10px">
+      1. <a href="https://console.firebase.google.com" target="_blank" style="color:var(--purple)">Firebase 콘솔</a>에서 새 프로젝트 생성<br>
+      2. 웹 앱 추가(</>) → firebaseConfig 복사<br>
+      3. Firestore Database → 테스트 모드로 생성<br>
+      4. Authentication → Google 로그인 사용 설정
+    </div>
+    <textarea id="fbConfigInput" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:monospace;min-height:88px;background:var(--surface2);color:var(--text);outline:none;resize:vertical;line-height:1.5" placeholder='{"apiKey":"AIza...","authDomain":"project.firebaseapp.com","projectId":"project-id","storageBucket":"project.appspot.com","messagingSenderId":"123...","appId":"1:123...:web:abc..."}'></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-primary" onclick="saveFbConfig()">연결하기</button>
+      <button class="btn-secondary" onclick="document.getElementById('fbSetupCard').style.display='none'">취소</button>
+    </div>
   </div>
 
   <div class="tabs">
@@ -575,8 +594,10 @@ function load(){
   checkStreak();checkDayReset();
   initColorPicker();render();updateProjSelect();restoreAutoSave();
   if(pendingCarryover.length)showCarryoverModal();
+  renderFirebaseUI();
+  try{initFirebase(FIREBASE_CONFIG,true);}catch(e){}
 }
-function save(){try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}scheduleAutoSave();}
+function save(){D._ts=Date.now();try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}scheduleAutoSave();fbSave();}
 
 function checkStreak(){
   const yest=new Date(Date.now()-86400000).toISOString().slice(0,10);
@@ -1213,6 +1234,116 @@ async function sendCoach(){
     D.coachMessages.push({role:'assistant',content:reply});if(D.coachMessages.length>20)D.coachMessages=D.coachMessages.slice(-20);save();
   }catch(e){document.getElementById('lm')?.remove();msgs.innerHTML+=`<div class="msg ai">연결 오류. API 키를 확인해봐!</div>`;}
   msgs.scrollTop=msgs.scrollHeight;btn.disabled=false;inp.focus();
+}
+
+// ===== FIREBASE SYNC =====
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyAqhn1BMijITYHMFKsQVXsWliza6-C5IJ8",
+  authDomain:"productivity-app-66ad7.firebaseapp.com",
+  projectId:"productivity-app-66ad7",
+  storageBucket:"productivity-app-66ad7.firebasestorage.app",
+  messagingSenderId:"478346997422",
+  appId:"1:478346997422:web:bc611160fa405fc459073f",
+  measurementId:"G-1DNQY9DR2Q"
+};
+let fbApp=null,fbAuth=null,fbDb=null,fbUser=null,fbUnsub=null,fbSaveTimer=null;
+const fbDeviceId=(()=>{let id=localStorage.getItem('__devId');if(!id){id=Math.random().toString(36).slice(2);localStorage.setItem('__devId',id);}return id;})();
+
+function parseFbConfig(v){
+  try{return JSON.parse(v);}catch(e){}
+  const m=v.match(/\{[\s\S]*\}/);
+  if(m){try{return new Function('return ('+m[0]+')')();}catch(e){}}
+  return null;
+}
+
+function initFirebase(config,silent){
+  try{
+    if(typeof firebase==='undefined'){toast('Firebase SDK 로딩 중... 잠시 후 다시 시도해주세요');return false;}
+    if(firebase.apps.length)fbApp=firebase.apps[0];
+    else fbApp=firebase.initializeApp(config);
+    fbAuth=firebase.auth();
+    fbDb=firebase.firestore();
+    fbAuth.onAuthStateChanged(user=>{
+      fbUser=user;renderFirebaseUI();
+      if(user)startFbSync();
+      else{if(fbUnsub){fbUnsub();fbUnsub=null;}}
+    });
+    fbAuth.getRedirectResult().catch(()=>{});
+    if(!silent)toast('Firebase 연결됐어요! Google 로그인 해주세요 🎉');
+    renderFirebaseUI();return true;
+  }catch(e){toast('Firebase 오류: '+e.message);return false;}
+}
+
+function signInGoogle(){
+  if(!fbAuth)return;
+  const p=new firebase.auth.GoogleAuthProvider();
+  if(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)){
+    fbAuth.signInWithRedirect(p);
+  }else{
+    fbAuth.signInWithPopup(p).catch(e=>{
+      if(e.code==='auth/popup-blocked')fbAuth.signInWithRedirect(p);
+      else toast('로그인 실패: '+e.message);
+    });
+  }
+}
+function fbSignOut(){if(fbAuth)fbAuth.signOut();toast('로그아웃했어요');}
+
+function fbSave(){
+  if(!fbUser||!fbDb)return;
+  clearTimeout(fbSaveTimer);
+  fbSaveTimer=setTimeout(async()=>{
+    try{await fbDb.collection('users').doc(fbUser.uid).set({...D,_devId:fbDeviceId});}catch(e){}
+  },2000);
+}
+
+async function startFbSync(){
+  if(!fbUser||!fbDb)return;
+  const ref=fbDb.collection('users').doc(fbUser.uid);
+  try{
+    const snap=await ref.get();
+    if(snap.exists){
+      const remote=snap.data();
+      if((remote._ts||0)>(D._ts||0)){
+        const{_devId,...data}=remote;
+        D={...data};
+        localStorage.setItem(SK,JSON.stringify(D));
+        render();renderProjects();renderGrowth();renderReport();
+        toast('최신 데이터를 불러왔어요 ✅');
+      }
+    }else{fbSave();}
+  }catch(e){}
+  if(fbUnsub)fbUnsub();
+  fbUnsub=ref.onSnapshot(snap=>{
+    if(!snap.exists)return;
+    const remote=snap.data();
+    if(remote._devId===fbDeviceId)return;
+    if((remote._ts||0)>(D._ts||0)){
+      const{_devId,...data}=remote;
+      D={...data};
+      localStorage.setItem(SK,JSON.stringify(D));
+      render();renderProjects();renderGrowth();renderReport();
+    }
+  });
+  renderFirebaseUI();
+}
+
+function renderFirebaseUI(){
+  const el=document.getElementById('fbStatus');if(!el)return;
+  if(!fbApp){
+    el.innerHTML=`<span style="font-size:12px;color:var(--text3)">⏳ Firebase 연결 중...</span>`;
+  }else if(!fbUser){
+    el.innerHTML=`<button onclick="signInGoogle()" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border:1px solid #4285F4;border-radius:8px;background:#EEF3FF;color:#4285F4;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap">G 로그인</button>`;
+  }else{
+    const img=fbUser.photoURL?`<img src="${fbUser.photoURL}" style="width:22px;height:22px;border-radius:50%;flex-shrink:0">`:'';
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:7px">${img}<span style="font-size:12px;color:var(--green);font-weight:500">☁ 동기화 중</span><button onclick="fbSignOut()" style="font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:inherit;padding:2px 7px">로그아웃</button></div>`;
+  }
+}
+
+function saveFbConfig(){
+  const v=document.getElementById('fbConfigInput').value.trim();
+  const config=parseFbConfig(v);
+  if(!config||!config.apiKey||!config.projectId){toast('설정이 올바르지 않아요. JSON을 그대로 붙여넣어주세요');return;}
+  if(initFirebase(config))document.getElementById('fbSetupCard').style.display='none';
 }
 
 function switchTab(name){
