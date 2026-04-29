@@ -751,8 +751,8 @@ function saveTaskEdit(i,inp){
   renderTasks();
 }
 
-function saveDayHistory(pct){
-  const t=today();if(!D.history)D.history=[];
+function saveDayHistory(pct,dateStr){
+  const t=dateStr||today();if(!D.history)D.history=[];
   const snap=D.tasks.map(x=>({text:x.text,done:x.done,timeSpent:x.timeSpent||0,projId:x.projId||null}));
   const totalTime=snap.reduce((s,x)=>s+(x.timeSpent||0),0);
   const routines=D.routines||[];
@@ -861,7 +861,9 @@ function checkDayReset(){
   const t=today();
   if(!D.lastTaskDate){D.lastTaskDate=t;return;}
   if(D.lastTaskDate===t)return;
-  const incomplete=(D.tasks||[]).filter(task=>!task.done);
+  const tasks=D.tasks||[];
+  if(tasks.length>0){const done=tasks.filter(x=>x.done).length;saveDayHistory(Math.round(done/tasks.length*100),D.lastTaskDate);}
+  const incomplete=tasks.filter(task=>!task.done);
   D.todayFocus='';
   D.todayFlowSessions=0;
   D.tasks=[];
@@ -869,7 +871,7 @@ function checkDayReset(){
   activeTimer={taskIdx:null,startTime:null};
   focusState={taskIdx:null,phase:'idle',remaining:0,total:0,elapsed:0};
   if(incomplete.length){pendingCarryover=incomplete;}
-  else{save();}
+  else{save();render();}
 }
 function showCarryoverModal(){
   document.getElementById('carryTaskList').innerHTML=pendingCarryover.map((t,i)=>`
@@ -1498,6 +1500,15 @@ function switchTab(name){
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 
 load();
+
+function _autoCheckDayReset(){
+  if(D.lastTaskDate&&D.lastTaskDate!==today()){
+    checkStreak();checkDayReset();render();
+    if(pendingCarryover.length)showCarryoverModal();
+  }
+}
+setInterval(_autoCheckDayReset,60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)_autoCheckDayReset();});
 </script>
 </body>
 </html>
