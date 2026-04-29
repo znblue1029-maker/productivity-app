@@ -1268,7 +1268,9 @@ function initFirebase(config,silent){
       if(user)startFbSync();
       else{if(fbUnsub){fbUnsub();fbUnsub=null;}}
     });
-    fbAuth.getRedirectResult().catch(()=>{});
+    fbAuth.getRedirectResult().then(result=>{
+      if(result&&result.user){fbUser=result.user;renderFirebaseUI();startFbSync();}
+    }).catch(()=>{});
     if(!silent)toast('Firebase 연결됐어요! Google 로그인 해주세요 🎉');
     renderFirebaseUI();return true;
   }catch(e){toast('Firebase 오류: '+e.message);return false;}
@@ -1277,14 +1279,13 @@ function initFirebase(config,silent){
 function signInGoogle(){
   if(!fbAuth)return;
   const p=new firebase.auth.GoogleAuthProvider();
-  if(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)){
-    fbAuth.signInWithRedirect(p);
-  }else{
-    fbAuth.signInWithPopup(p).catch(e=>{
-      if(e.code==='auth/popup-blocked')fbAuth.signInWithRedirect(p);
-      else toast('로그인 실패: '+e.message);
-    });
-  }
+  fbAuth.signInWithPopup(p).catch(e=>{
+    if(e.code==='auth/popup-blocked'||e.code==='auth/cancelled-popup-request'){
+      fbAuth.signInWithRedirect(p);
+    }else{
+      toast('로그인 실패: '+e.message);
+    }
+  });
 }
 function fbSignOut(){if(fbAuth)fbAuth.signOut();toast('로그아웃했어요');}
 
