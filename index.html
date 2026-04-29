@@ -277,8 +277,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 <body>
 
 <!-- Day Detail Modal -->
-<div id="dayDetailOverlay" style="position:fixed;inset:0;background:rgba(26,24,48,0.75);z-index:150;display:none;align-items:flex-end;justify-content:center" onclick="if(event.target===this)closeDayDetail()">
-  <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-width:680px;padding:1.5rem;max-height:75vh;overflow-y:auto">
+<div id="dayDetailOverlay" style="position:fixed;inset:0;background:rgba(26,24,48,0.75);z-index:150;display:none;align-items:center;justify-content:center;padding:1.5rem" onclick="if(event.target===this)closeDayDetail()">
+  <div style="background:var(--surface);border-radius:16px;width:100%;max-width:480px;padding:1.5rem;max-height:80vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <div id="dayDetailTitle" style="font-size:16px;font-weight:700"></div>
       <button onclick="closeDayDetail()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text3);line-height:1;padding:0 4px">×</button>
