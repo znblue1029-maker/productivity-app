@@ -678,12 +678,13 @@ function renderTasks(){
     const proj=t.projId?(D.projects||[]).find(p=>p.id===t.projId):null;
     const tag=proj?`<span class="task-proj-tag" style="background:${proj.color}22;color:${proj.color}">${esc(proj.name)}</span>`:'';
     const carried=t.carriedOver?`<span class="carryover-badge">↩이월</span>`:'';
-    return `<div class="task-row">
+    return `<div class="task-row" id="task-row-${i}">
       <div class="chk ${t.done?'done':''}" onclick="toggleTask(${i})"></div>
-      <span class="task-txt ${t.done?'done':''}">${esc(t.text)}</span>
+      <span class="task-txt ${t.done?'done':''}" ondblclick="editTask(${i})">${esc(t.text)}</span>
       ${carried}${tag}
       ${tStr?`<span class="task-time ${isRunning?'active':''}">${tStr}</span>`:''}
       ${!t.done?`<button class="timer-btn ${isRunning?'running':'idle'}" onclick="startFocusMode(${i})">▶</button>`:''}
+      <button class="del-btn" onclick="editTask(${i})" title="수정">✏</button>
       <button class="del-btn" onclick="deleteTask(${i})">×</button>
     </div>`;
   };
@@ -733,6 +734,22 @@ function toggleTask(i){
   save();renderTasks();updateTodayStats();updateProjProgress();
 }
 function deleteTask(i){if(activeTimer.taskIdx===i)flushTimer();D.tasks.splice(i,1);save();renderTasks();updateProjProgress();}
+function editTask(i){
+  const row=document.getElementById('task-row-'+i);if(!row)return;
+  const span=row.querySelector('.task-txt');if(!span)return;
+  const inp=document.createElement('input');
+  inp.type='text';inp.value=D.tasks[i].text;
+  inp.style.cssText='flex:1;padding:3px 8px;border:1.5px solid var(--purple);border-radius:6px;font-size:14px;font-family:inherit;background:var(--surface);color:var(--text);outline:none;min-width:0';
+  let saved=false;
+  inp.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){saved=true;saveTaskEdit(i,inp);}if(e.key==='Escape')renderTasks();};
+  inp.onblur=()=>{if(!saved)saveTaskEdit(i,inp);};
+  span.replaceWith(inp);inp.focus();inp.select();
+}
+function saveTaskEdit(i,inp){
+  const v=inp.value.trim();
+  if(v&&v!==D.tasks[i].text){D.tasks[i].text=v;save();}
+  renderTasks();
+}
 
 function saveDayHistory(pct){
   const t=today();if(!D.history)D.history=[];
