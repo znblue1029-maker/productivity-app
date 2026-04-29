@@ -456,10 +456,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
   <!-- 성장 기록 -->
   <div class="section" id="tab-growth">
-    <div class="stat-grid">
+    <div class="stat-grid" style="grid-template-columns:repeat(2,1fr)">
       <div class="stat-card"><div class="stat-val" id="sStreak">0</div><div class="stat-lbl">연속 달성일</div></div>
       <div class="stat-card"><div class="stat-val" id="sTotal">0</div><div class="stat-lbl">총 완료일</div></div>
       <div class="stat-card"><div class="stat-val" id="sAvg">0%</div><div class="stat-lbl">평균 달성률</div></div>
+      <div class="stat-card"><div class="stat-val" id="sRoutineAvg">-%</div><div class="stat-lbl">평균 루틴 완료율</div></div>
     </div>
     <div class="view-filter">
       <button class="vf-btn active" onclick="setView('week',this)">주별</button>
@@ -737,9 +738,14 @@ function saveDayHistory(pct){
   const t=today();if(!D.history)D.history=[];
   const snap=D.tasks.map(x=>({text:x.text,done:x.done,timeSpent:x.timeSpent||0,projId:x.projId||null}));
   const totalTime=snap.reduce((s,x)=>s+(x.timeSpent||0),0);
+  const routines=D.routines||[];
+  const checks=(D.routineChecks||{})[t]||{};
+  const routineDone=routines.filter(r=>checks[r.id]).length;
+  const routineTotal=routines.length;
+  const routinePct=routineTotal>0?Math.round(routineDone/routineTotal*100):null;
   const ex=D.history.find(h=>h.date===t);
-  if(ex){ex.pct=pct;ex.focus=D.todayFocus;ex.tasks=snap;ex.totalTime=totalTime;ex.flowSessions=D.todayFlowSessions||0;}
-  else D.history.push({date:t,pct,focus:D.todayFocus,tasks:snap,totalTime,flowSessions:D.todayFlowSessions||0});
+  if(ex){ex.pct=pct;ex.focus=D.todayFocus;ex.tasks=snap;ex.totalTime=totalTime;ex.flowSessions=D.todayFlowSessions||0;ex.routinePct=routinePct;ex.routineDone=routineDone;ex.routineTotal=routineTotal;}
+  else D.history.push({date:t,pct,focus:D.todayFocus,tasks:snap,totalTime,flowSessions:D.todayFlowSessions||0,routinePct,routineDone,routineTotal});
 }
 
 // Focus Mode
@@ -1105,6 +1111,8 @@ function renderGrowth(){
   document.getElementById('sStreak').textContent=D.streak;
   document.getElementById('sTotal').textContent=h.filter(x=>x.pct>=50).length;
   document.getElementById('sAvg').textContent=(h.length?Math.round(h.reduce((s,x)=>s+x.pct,0)/h.length):0)+'%';
+  const rh=h.filter(x=>x.routinePct!=null);
+  document.getElementById('sRoutineAvg').textContent=rh.length?Math.round(rh.reduce((s,x)=>s+x.routinePct,0)/rh.length)+'%':'-%';
   const view=document.getElementById('growthView');
   if(currentView==='week')view.innerHTML=weekView(h);
   else if(currentView==='month')view.innerHTML=monthView(h);
@@ -1123,8 +1131,8 @@ function weekView(history){
     for(let i=0;i<7;i++){const d=new Date(new Date(wk).getTime()+i*86400000);const ds=d.toISOString().slice(0,10);const found=days.find(h=>h.date===ds);const dn=['월','화','수','목','금','토','일'][i];if(!found)cells.push(`<div class="day-cell dc-empty">${dn}</div>`);else{const cls=found.pct>=90?'dc-perfect':found.pct>=70?'dc-high':found.pct>=40?'dc-mid':'dc-low';cells.push(`<div class="day-cell ${cls}">${found.pct}%</div>`);}}
     const details=days.sort((a,b)=>b.date.localeCompare(a.date)).map(h=>{
       const done=(h.tasks||[]).filter(t=>t.done);const c=h.pct>=80?'var(--purple)':h.pct>=50?'var(--green)':'var(--text3)';
-      const rfl=h.reflection;const rflStr=rfl?` ${RATE_EMOJIS[rfl.rate]?.split(' ')[0]||''}`:'' ;
-      return `<div class="day-detail"><div style="display:flex;justify-content:space-between"><span style="color:var(--text2);font-size:12px">${h.date}${h.totalTime?' · ⏱'+fmtMin(h.totalTime):''}${rflStr}</span><span style="font-weight:700;color:${c}">${h.pct}%</span></div>${h.focus?`<span style="color:var(--purple);font-size:12px">🎯 ${esc(h.focus)}</span>`:''}${rfl&&rfl.reasons&&rfl.reasons.length?`<span style="font-size:11px;color:var(--red)">${rfl.reasons.join(', ')}</span>`:''}</div>`;
+      const rfl=h.reflection;const rflStr=rfl?` ${RATE_EMOJIS[rfl.rate]?.split(' ')[0]||''}`:'' ;const routineStr=h.routinePct!=null?` · 🔄${h.routinePct}%`:'';
+      return `<div class="day-detail"><div style="display:flex;justify-content:space-between"><span style="color:var(--text2);font-size:12px">${h.date}${h.totalTime?' · ⏱'+fmtMin(h.totalTime):''}${routineStr}${rflStr}</span><span style="font-weight:700;color:${c}">${h.pct}%</span></div>${h.focus?`<span style="color:var(--purple);font-size:12px">🎯 ${esc(h.focus)}</span>`:''}${rfl&&rfl.reasons&&rfl.reasons.length?`<span style="font-size:11px;color:var(--red)">${rfl.reasons.join(', ')}</span>`:''}</div>`;
     }).join('');
     return `<div class="period-card"><div class="period-header"><span class="period-title">${label}</span><span class="period-avg">${avg}% 평균</span></div><div class="week-days">${cells.join('')}</div>${details}</div>`;
   }).join('');
@@ -1159,6 +1167,7 @@ function allView(history){
       </div>
       ${h.focus?`<div style="font-size:13px;color:var(--purple);margin-bottom:3px">🎯 ${esc(h.focus)}</div>`:''}
       ${done.length?`<div style="font-size:12px;color:var(--text2);margin-bottom:3px">${done.map(t=>'✅ '+esc(t.text)+(t.timeSpent?' ('+fmtMin(t.timeSpent)+')':'')).join('<br>')}</div>`:''}
+      ${h.routinePct!=null?`<div style="font-size:12px;color:var(--green);margin-bottom:2px">🔄 루틴 ${h.routinePct}% (${h.routineDone}/${h.routineTotal})</div>`:''}
       ${rfl?`<div style="font-size:12px;color:var(--text3)">${RATE_EMOJIS[rfl.rate]||''}${rfl.reasons&&rfl.reasons.length?' · '+rfl.reasons.join(', '):''}</div>`:''}
     </div>`;
   }).join('');
@@ -1202,7 +1211,20 @@ function renderReport(){
   // 프로젝트 진행 현황
   const projs=D.projects||[];
   const projHtml=projs.length?`<div class="period-card"><div class="report-section-title">📁 프로젝트 진행 현황</div><div class="bar-chart">${projs.map(p=>{const ms=p.milestones||[];const done=ms.filter(m=>m.done).length;const pct=ms.length?Math.round(done/ms.length*100):0;return `<div class="bar-row"><span class="bar-label" style="width:80px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${p.color}"></div></div><span class="bar-val">${pct}%</span></div>`;}).join('')}</div></div>`:'';
-  view.innerHTML=bigStats+heatmap+failHtml+projHtml+monthChart+dowChart+rankHtml;
+  // 루틴 달성 현황
+  const routines=D.routines||[];
+  const allChecks=D.routineChecks||{};
+  const rDays=history.filter(h=>h.routinePct!=null);
+  const avgRoutinePct=rDays.length?Math.round(rDays.reduce((s,h)=>s+h.routinePct,0)/rDays.length):null;
+  const routineFullDays=rDays.filter(h=>h.routinePct===100).length;
+  const routineStats=routines.map(r=>{
+    const allDays=Object.keys(allChecks);
+    const doneCnt=allDays.filter(d=>allChecks[d]&&allChecks[d][r.id]).length;
+    const pct=allDays.length?Math.round(doneCnt/allDays.length*100):0;
+    return {text:r.text,category:r.category,pct,doneCnt,total:allDays.length};
+  }).sort((a,b)=>b.pct-a.pct);
+  const routineReportHtml=routines.length&&avgRoutinePct!=null?`<div class="period-card"><div class="report-section-title">🔄 루틴 달성 현황</div><div style="display:flex;gap:10px;margin-bottom:14px;text-align:center"><div style="flex:1"><div style="font-size:22px;font-weight:700;color:var(--green)">${avgRoutinePct}%</div><div style="font-size:11px;color:var(--text3);margin-top:2px">평균 완료율</div></div><div style="flex:1"><div style="font-size:22px;font-weight:700;color:var(--green)">${routineFullDays}일</div><div style="font-size:11px;color:var(--text3);margin-top:2px">100% 완료일</div></div></div><div class="bar-chart">${routineStats.map(r=>{const catEmoji={morning:'🌅',afternoon:'☀️',evening:'🌙'}[r.category]||'';return `<div class="bar-row"><span class="bar-label" style="width:100px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${catEmoji} ${esc(r.text)}</span><div class="bar-track"><div class="bar-fill green" style="width:${r.pct}%"></div></div><span class="bar-val">${r.pct}%</span></div>`;}).join('')}</div></div>`:'';
+  view.innerHTML=bigStats+heatmap+routineReportHtml+failHtml+projHtml+monthChart+dowChart+rankHtml;
 }
 
 function calcMaxStreak(history){
@@ -1299,6 +1321,8 @@ function toggleRoutineCheck(id){
   if(!D.routineChecks[t])D.routineChecks[t]={};
   D.routineChecks[t][id]=!D.routineChecks[t][id];
   updateStreak();
+  const tasks=D.tasks||[];const done=tasks.filter(t=>t.done).length;
+  saveDayHistory(tasks.length?Math.round(done/tasks.length*100):0);
   save();renderRoutines();
 }
 
