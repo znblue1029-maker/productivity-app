@@ -256,6 +256,19 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .done-section-label{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;padding:10px 0 4px;border-top:1px solid var(--border);margin-top:4px}
 /* Carried-over badge */
 .carryover-badge{font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:1px 5px;flex-shrink:0}
+/* Routine */
+.routine-cat-label{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin:10px 0 5px;display:flex;align-items:center;gap:5px}
+.routine-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--surface2)}
+.routine-row:last-child{border-bottom:none}
+.routine-chk{width:20px;height:20px;border-radius:6px;border:2px solid var(--border);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.routine-chk.done{background:var(--green);border-color:var(--green)}
+.routine-chk.done::after{content:'✓';color:white;font-size:11px;font-weight:700}
+.routine-txt{flex:1;font-size:14px}
+.routine-txt.done{color:var(--text3);text-decoration:line-through}
+.routine-add-row{display:flex;gap:6px;margin-bottom:0}
+.routine-add-row input{flex:1;min-width:100px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--surface2);color:var(--text);outline:none}
+.routine-add-row input:focus{border-color:var(--green)}
+.routine-add-row select{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;background:var(--surface2);color:var(--text);outline:none}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
@@ -348,6 +361,25 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <textarea class="focus-textarea" id="focusInput" rows="2" placeholder="오늘 반드시 해낼 단 하나는?"></textarea>
         <button class="declare-btn" onclick="saveFocus()">🎯 선언하기</button>
       </div>
+    </div>
+    <!-- 나의 루틴 -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div class="card-label" style="margin-bottom:0">나의 루틴</div>
+        <button onclick="toggleRoutineAdd()" style="font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;font-family:inherit;padding:2px 4px">＋ 추가</button>
+      </div>
+      <div id="routineAddForm" style="display:none;margin-bottom:10px">
+        <div class="routine-add-row">
+          <input type="text" id="routineInput" placeholder="루틴 이름" onkeydown="if(event.key==='Enter'&&!event.isComposing)addRoutine()"/>
+          <select id="routineCatSelect">
+            <option value="morning">🌅 아침</option>
+            <option value="afternoon">☀️ 낮</option>
+            <option value="evening">🌙 저녁</option>
+          </select>
+          <button class="btn-primary" onclick="addRoutine()">추가</button>
+        </div>
+      </div>
+      <div id="routineList"></div>
     </div>
     <div class="card">
       <div class="card-label">할 일</div>
@@ -476,7 +508,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 const SK='__myprod_v4';
 const IDB_NAME='myprod_fs';const IDB_STORE='handles';
 const PROJ_COLORS=['#534AB7','#1D9E75','#E8824A','#E84A4A','#3B82F6','#8B5CF6','#EC4899','#0891B2'];
-let D={streak:0,lastActiveDate:null,todayFocus:'',tasks:[],ideas:[],history:[],coachMessages:[],todayFlowSessions:0,projects:[],reflections:[],lastTaskDate:null};
+let D={streak:0,lastActiveDate:null,todayFocus:'',tasks:[],ideas:[],history:[],coachMessages:[],todayFlowSessions:0,projects:[],reflections:[],lastTaskDate:null,routines:[],routineChecks:{}};
 let selectedColor=PROJ_COLORS[0];
 let currentView='week';
 let activeTimer={taskIdx:null,startTime:null};
@@ -610,7 +642,7 @@ function render(){
   const d=new Date();const days=['일','월','화','수','목','금','토'];
   document.getElementById('todayDate').textContent=`${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
   document.getElementById('streakNum').textContent=D.streak;
-  renderFocus();renderTasks();renderIdeas();updateTodayStats();renderTodayRefl();
+  renderFocus();renderRoutines();renderTasks();renderIdeas();updateTodayStats();renderTodayRefl();
 }
 
 // Focus
@@ -1234,6 +1266,72 @@ async function sendCoach(){
     D.coachMessages.push({role:'assistant',content:reply});if(D.coachMessages.length>20)D.coachMessages=D.coachMessages.slice(-20);save();
   }catch(e){document.getElementById('lm')?.remove();msgs.innerHTML+=`<div class="msg ai">연결 오류. API 키를 확인해봐!</div>`;}
   msgs.scrollTop=msgs.scrollHeight;btn.disabled=false;inp.focus();
+}
+
+// ===== ROUTINE =====
+const ROUTINE_CATS={morning:{label:'아침',emoji:'🌅'},afternoon:{label:'낮',emoji:'☀️'},evening:{label:'저녁',emoji:'🌙'}};
+
+function toggleRoutineAdd(){
+  const f=document.getElementById('routineAddForm');
+  const open=f.style.display==='none'||f.style.display==='';
+  f.style.display=open?'block':'none';
+  if(open)document.getElementById('routineInput').focus();
+}
+
+function addRoutine(){
+  const inp=document.getElementById('routineInput');
+  const v=inp.value.trim();if(!v)return;
+  const cat=document.getElementById('routineCatSelect').value;
+  if(!D.routines)D.routines=[];
+  D.routines.push({id:uid(),text:v,category:cat});
+  inp.value='';
+  save();renderRoutines();
+}
+
+function deleteRoutine(id){
+  D.routines=(D.routines||[]).filter(r=>r.id!==id);
+  save();renderRoutines();
+}
+
+function toggleRoutineCheck(id){
+  const t=today();
+  if(!D.routineChecks)D.routineChecks={};
+  if(!D.routineChecks[t])D.routineChecks[t]={};
+  D.routineChecks[t][id]=!D.routineChecks[t][id];
+  updateStreak();
+  save();renderRoutines();
+}
+
+function renderRoutines(){
+  const list=document.getElementById('routineList');if(!list)return;
+  const routines=D.routines||[];
+  const checks=(D.routineChecks||{})[today()]||{};
+  if(!routines.length){
+    list.innerHTML='<div class="empty" style="padding:0.5rem 0 0.25rem">루틴을 추가해보세요!</div>';
+    return;
+  }
+  const done=routines.filter(r=>checks[r.id]).length;
+  const pct=Math.round(done/routines.length*100);
+  let html=`<div class="progress-bar-wrap" style="margin:0 0 8px">
+    <span style="font-size:12px;color:var(--text2)">${done}/${routines.length}</span>
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:var(--green)"></div></div>
+    <span style="font-size:12px;color:var(--text2)">${pct}%</span>
+  </div>`;
+  ['morning','afternoon','evening'].forEach(cat=>{
+    const items=routines.filter(r=>r.category===cat);
+    if(!items.length)return;
+    const {emoji,label}=ROUTINE_CATS[cat];
+    html+=`<div class="routine-cat-label">${emoji} ${label}</div>`;
+    items.forEach(r=>{
+      const isDone=!!checks[r.id];
+      html+=`<div class="routine-row">
+        <div class="routine-chk ${isDone?'done':''}" onclick="toggleRoutineCheck('${r.id}')"></div>
+        <span class="routine-txt ${isDone?'done':''}">${esc(r.text)}</span>
+        <button class="del-btn" onclick="deleteRoutine('${r.id}')">×</button>
+      </div>`;
+    });
+  });
+  list.innerHTML=html;
 }
 
 // ===== FIREBASE SYNC =====
