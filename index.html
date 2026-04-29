@@ -276,6 +276,17 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 </head>
 <body>
 
+<!-- Day Detail Modal -->
+<div id="dayDetailOverlay" style="position:fixed;inset:0;background:rgba(26,24,48,0.75);z-index:150;display:none;align-items:flex-end;justify-content:center" onclick="if(event.target===this)closeDayDetail()">
+  <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-width:680px;padding:1.5rem;max-height:75vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div id="dayDetailTitle" style="font-size:16px;font-weight:700"></div>
+      <button onclick="closeDayDetail()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text3);line-height:1;padding:0 4px">×</button>
+    </div>
+    <div id="dayDetailContent"></div>
+  </div>
+</div>
+
 <!-- Day Reset Modal -->
 <div class="day-reset-overlay" id="dayResetOverlay">
   <div class="day-reset-card">
@@ -1147,7 +1158,7 @@ function weekView(history){
     const wkE=new Date(new Date(wk).getTime()+6*86400000);
     const label=`${new Date(wk).getMonth()+1}/${new Date(wk).getDate()} ~ ${wkE.getMonth()+1}/${wkE.getDate()}`;
     const cells=[];
-    for(let i=0;i<7;i++){const d=new Date(new Date(wk).getTime()+i*86400000);const ds=d.toISOString().slice(0,10);const found=days.find(h=>h.date===ds);const dn=['월','화','수','목','금','토','일'][i];if(!found)cells.push(`<div class="day-cell dc-empty">${dn}</div>`);else{const cls=found.pct>=90?'dc-perfect':found.pct>=70?'dc-high':found.pct>=40?'dc-mid':'dc-low';cells.push(`<div class="day-cell ${cls}">${found.pct}%</div>`);}}
+    for(let i=0;i<7;i++){const d=new Date(new Date(wk).getTime()+i*86400000);const ds=d.toISOString().slice(0,10);const found=days.find(h=>h.date===ds);const dn=['월','화','수','목','금','토','일'][i];if(!found)cells.push(`<div class="day-cell dc-empty" style="cursor:pointer" onclick="showDayDetail('${ds}')">${dn}</div>`);else{const cls=found.pct>=90?'dc-perfect':found.pct>=70?'dc-high':found.pct>=40?'dc-mid':'dc-low';cells.push(`<div class="day-cell ${cls}" style="cursor:pointer" onclick="showDayDetail('${ds}')">${found.pct}%</div>`);}}
     const details=days.sort((a,b)=>b.date.localeCompare(a.date)).map(h=>{
       const done=(h.tasks||[]).filter(t=>t.done);const c=h.pct>=80?'var(--purple)':h.pct>=50?'var(--green)':'var(--text3)';
       const rfl=h.reflection;const rflStr=rfl?` ${RATE_EMOJIS[rfl.rate]?.split(' ')[0]||''}`:'' ;const routineStr=h.routinePct!=null?` · 🔄${h.routinePct}%`:'';
@@ -1166,7 +1177,7 @@ function monthView(history){
     const avg=Math.round(days.reduce((s,d)=>s+d.pct,0)/days.length);const total=days.filter(d=>d.pct>=50).length;
     const wdHdr=['일','월','화','수','목','금','토'].map(d=>`<div style="font-size:10px;color:var(--text3);text-align:center;padding:2px 0">${d}</div>`).join('');
     let cells=Array(fd).fill(`<div class="mc mc-empty"></div>`);
-    for(let i=1;i<=dim;i++){const ds=`${ym}-${String(i).padStart(2,'0')}`;const found=days.find(h=>h.date===ds);const isToday=ds===t;let cls='mc-none';if(found)cls=found.pct>=80?'mc-high':found.pct>=50?'mc-mid':'mc-low';cells.push(`<div class="mc ${cls}${isToday?' mc-today':''}" title="${found?found.pct+'%':''}">${i}</div>`);}
+    for(let i=1;i<=dim;i++){const ds=`${ym}-${String(i).padStart(2,'0')}`;const found=days.find(h=>h.date===ds);const isToday=ds===t;let cls='mc-none';if(found)cls=found.pct>=80?'mc-high':found.pct>=50?'mc-mid':'mc-low';cells.push(`<div class="mc ${cls}${isToday?' mc-today':''}" title="${found?found.pct+'%':''}" style="cursor:pointer" onclick="showDayDetail('${ds}')">${i}</div>`);}
     return `<div class="period-card"><div class="period-header"><span class="period-title">${y}년 ${parseInt(m)}월</span><span class="period-avg">${total}일 달성 · ${avg}% 평균</span></div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">${wdHdr}</div><div class="month-grid">${cells.join('')}</div></div>`;
   }).join('');
 }
@@ -1179,7 +1190,7 @@ function allView(history){
   const all=sorted.map(h=>{
     const done=(h.tasks||[]).filter(t=>t.done);const c=h.pct>=80?'var(--purple)':h.pct>=50?'var(--green)':'var(--text3)';
     const rfl=h.reflection;
-    return `<div class="period-card" style="padding:.75rem 1rem">
+    return `<div class="period-card" style="padding:.75rem 1rem;cursor:pointer" onclick="showDayDetail('${h.date}')">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <span style="font-weight:700;font-size:13px">${h.date}${h.totalTime?`<span style="font-size:11px;color:var(--text3);font-weight:400"> · ⏱${fmtMin(h.totalTime)}</span>`:''}</span>
         <span style="font-weight:700;color:${c}">${h.pct}%</span>
@@ -1497,6 +1508,29 @@ function switchTab(name){
   if(name==='report')renderReport();
   if(name==='projects')renderProjects();
 }
+function showDayDetail(ds){
+  const h=(D.history||[]).find(x=>x.date===ds);
+  document.getElementById('dayDetailTitle').textContent=ds;
+  const content=document.getElementById('dayDetailContent');
+  if(!h){content.innerHTML='<div class="empty">이 날의 기록이 없어요</div>';document.getElementById('dayDetailOverlay').style.display='flex';return;}
+  const done=(h.tasks||[]).filter(t=>t.done);
+  const undone=(h.tasks||[]).filter(t=>!t.done);
+  const rfl=h.reflection;
+  const c=h.pct>=80?'var(--purple)':h.pct>=50?'var(--green)':'var(--text3)';
+  content.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:13px;color:var(--text2)">${h.totalTime?'⏱ '+fmtMin(h.totalTime):''}${h.routinePct!=null?' · 🔄 루틴 '+h.routinePct+'%':''}</span>
+      <span style="font-size:24px;font-weight:700;color:${c}">${h.pct}%</span>
+    </div>
+    ${h.focus?`<div style="padding:10px 12px;background:var(--purple-light);border-radius:8px;font-size:13px;color:var(--purple);font-weight:500;margin-bottom:10px">🎯 ${esc(h.focus)}</div>`:''}
+    ${done.length?`<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">완료한 할 일</div>${done.map(t=>`<div style="font-size:13px;padding:4px 0;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--surface2)"><span>✅ ${esc(t.text)}</span>${t.timeSpent?`<span style="font-size:11px;color:var(--text3);margin-left:auto">${fmtMin(t.timeSpent)}</span>`:''}</div>`).join('')}</div>`:''}
+    ${undone.length?`<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">미완료</div>${undone.map(t=>`<div style="font-size:13px;padding:4px 0;color:var(--text3);border-bottom:1px solid var(--surface2)">⬜ ${esc(t.text)}</div>`).join('')}</div>`:''}
+    ${rfl?`<div style="padding:10px 12px;background:var(--surface2);border-radius:8px"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">회고</div><div style="font-size:13px;color:var(--text2)">${RATE_EMOJIS[rfl.rate]||''}${rfl.reasons&&rfl.reasons.length?' · '+rfl.reasons.join(', '):''}</div>${rfl.note?`<div style="font-size:13px;color:var(--text);margin-top:6px;line-height:1.6">💬 ${esc(rfl.note)}</div>`:''}</div>`:''}
+  `;
+  document.getElementById('dayDetailOverlay').style.display='flex';
+}
+function closeDayDetail(){document.getElementById('dayDetailOverlay').style.display='none';}
+
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 
 load();
