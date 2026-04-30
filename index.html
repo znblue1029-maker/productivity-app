@@ -628,7 +628,8 @@ function genCSVContent(){
 const FAIL_REASONS=['완벽주의로 시작 못함','딴짓 (유튜브 등)','우선순위 혼란','컨디션 저조','외부 방해','아이디어 확장','기타'];
 const RATE_EMOJIS={good:'😊 좋았어',ok:'😐 보통',bad:'😞 힘들었어'};
 
-function today(){return new Date().toISOString().slice(0,10)}
+function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function yesterday(){const d=new Date();d.setDate(d.getDate()-1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function fmtMin(s){if(!s||s<1)return '0초';if(s<60)return s+'초';if(s<3600)return Math.floor(s/60)+'분';return Math.floor(s/3600)+'시간 '+Math.floor((s%3600)/60)+'분';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
@@ -644,7 +645,7 @@ function load(){
 function save(){D._ts=Date.now();try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}scheduleAutoSave();fbSave();}
 
 function checkStreak(){
-  const yest=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const yest=yesterday();
   if(!D.lastActiveDate)return;
   if(D.lastActiveDate===today()||D.lastActiveDate===yest)return;
   D.streak=0;
@@ -665,7 +666,7 @@ function renderFocus(){
 function editFocus(){document.getElementById('focus-show').style.display='none';document.getElementById('focus-edit').style.display='block';document.getElementById('focusInput').value=D.todayFocus;document.getElementById('focusInput').focus();}
 function saveFocus(){const v=document.getElementById('focusInput').value.trim();if(!v)return;D.todayFocus=v;updateStreak();save();renderFocus();}
 function updateStreak(){
-  const t=today(),yest=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const t=today(),yest=yesterday();
   if(D.lastActiveDate===t)return;
   if(D.lastActiveDate===yest)D.streak+=1;
   else D.streak=1;
