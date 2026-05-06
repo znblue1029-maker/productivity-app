@@ -287,6 +287,12 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .task-prio-badge.p1{background:var(--purple)}
 .task-prio-badge.p2{background:#7F77DD}
 .task-prio-badge.p3{background:#a49fd6}
+.task-time-set{font-size:10px;font-weight:600;color:var(--purple);background:var(--purple-light);border:none;border-radius:8px;padding:2px 7px;cursor:pointer;flex-shrink:0;white-space:nowrap;font-family:inherit}
+.task-time-add{font-size:10px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:8px;padding:2px 7px;cursor:pointer;flex-shrink:0;font-family:inherit}
+.tt-task-item{display:flex;align-items:center;gap:6px;padding:3px 0}
+.tt-task-time{font-size:10px;font-weight:700;color:var(--purple);min-width:72px;flex-shrink:0}
+.tt-task-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tt-empty-slot{font-size:12px;color:var(--text3)}
 .brain-item-text{flex:1;font-size:13px;line-height:1.4}
 .brain-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 3px;flex-shrink:0;line-height:1}
 /* Timetable */
@@ -444,7 +450,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div id="ttSlots-pm"></div>
       <div class="tt-section-lbl">저녁</div>
       <div id="ttSlots-eve"></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:8px">탭하면 입력할 수 있어요</div>
+      <div id="ttUnscheduled" style="display:none"></div>
     </div>
     <div class="card" id="timeLogCard" style="display:none">
       <div class="card-label">오늘 작업별 집중 시간</div>
@@ -724,11 +730,13 @@ function renderTasks(){
     const carried=t.carriedOver?`<span class="carryover-badge">↩이월</span>`:'';
     const prioNum=t.brainId?(D.priorities||[]).indexOf(t.brainId)+1:0;
     const prioBadge=prioNum>0?`<div class="task-prio-badge p${prioNum}">${prioNum}</div>`:'';
+    const timeStr=t.startTime?(t.startTime+(t.endTime?'–'+t.endTime:'')):'';
+    const timeBadge=!t.done?`<button class="${timeStr?'task-time-set':'task-time-add'}" onclick="editTaskTime(event,${i})">${timeStr||'+시간'}</button>`:'';
     return `<div class="task-row" id="task-row-${i}">
       ${prioBadge}
       <div class="chk ${t.done?'done':''}" onclick="toggleTask(${i})"></div>
       <span class="task-txt ${t.done?'done':''}" ondblclick="editTask(${i})">${esc(t.text)}</span>
-      ${carried}${tag}
+      ${carried}${tag}${timeBadge}
       ${tStr?`<span class="task-time ${isRunning?'active':''}">${tStr}</span>`:''}
       ${!t.done?`<button class="timer-btn ${isRunning?'running':'idle'}" onclick="startFocusMode(${i})">▶</button>`:''}
       <button class="del-btn" onclick="editTask(${i})" title="수정">✏</button>
@@ -817,7 +825,7 @@ function saveTaskEdit(i,inp){
 
 function saveDayHistory(pct,dateStr){
   const t=dateStr||today();if(!D.history)D.history=[];
-  const snap=D.tasks.map(x=>({text:x.text,done:x.done,timeSpent:x.timeSpent||0,projId:x.projId||null}));
+  const snap=D.tasks.map(x=>({text:x.text,done:x.done,timeSpent:x.timeSpent||0,projId:x.projId||null,startTime:x.startTime||null,endTime:x.endTime||null}));
   const totalTime=snap.reduce((s,x)=>s+(x.timeSpent||0),0);
   const routines=D.routines||[];
   const checks=(D.routineChecks||{})[t]||{};
@@ -1307,7 +1315,12 @@ function renderReport(){
     return {text:r.text,category:r.category,pct,doneCnt,total:allDays.length};
   }).sort((a,b)=>b.pct-a.pct);
   const routineReportHtml=routines.length&&avgRoutinePct!=null?`<div class="period-card"><div class="report-section-title">🔄 루틴 달성 현황</div><div style="display:flex;gap:10px;margin-bottom:14px;text-align:center"><div style="flex:1"><div style="font-size:22px;font-weight:700;color:var(--green)">${avgRoutinePct}%</div><div style="font-size:11px;color:var(--text3);margin-top:2px">평균 완료율</div></div><div style="flex:1"><div style="font-size:22px;font-weight:700;color:var(--green)">${routineFullDays}일</div><div style="font-size:11px;color:var(--text3);margin-top:2px">100% 완료일</div></div></div><div class="bar-chart">${routineStats.map(r=>{const catEmoji={morning:'🌅',afternoon:'☀️',evening:'🌙'}[r.category]||'';return `<div class="bar-row"><span class="bar-label" style="width:100px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${catEmoji} ${esc(r.text)}</span><div class="bar-track"><div class="bar-fill green" style="width:${r.pct}%"></div></div><span class="bar-val">${r.pct}%</span></div>`;}).join('')}</div></div>`:'';
-  view.innerHTML=bigStats+heatmap+routineReportHtml+failHtml+projHtml+monthChart+dowChart+rankHtml;
+  const slotStat={};TT_SLOTS.forEach(s=>{slotStat[s.key]={label:s.label,count:0};});
+  (D.history||[]).forEach(h=>{(h.tasks||[]).forEach(t=>{if(t.startTime){const hh=parseInt(t.startTime.split(':')[0],10);const sl=TT_SLOTS.find(s=>{const[sh,eh]=s.key.split('-').map(Number);return hh>=sh&&hh<eh;});if(sl&&slotStat[sl.key])slotStat[sl.key].count++;}});});
+  const slotArr=TT_SLOTS.map(s=>slotStat[s.key]).filter(s=>s.count>0);
+  let timePatternHtml='';
+  if(slotArr.length>=2){const maxC=Math.max(...slotArr.map(s=>s.count),1);const peak=slotArr.reduce((a,b)=>b.count>a.count?b:a);timePatternHtml=`<div class="period-card"><div class="report-section-title">⏰ 시간대별 생산성 패턴</div><div style="font-size:13px;color:var(--purple);font-weight:600;margin-bottom:12px">💡 ${peak.label}에 가장 많이 일했어요 (${peak.count}개 할 일)</div><div class="bar-chart">${slotArr.map(s=>`<div class="bar-row"><span class="bar-label">${s.label}</span><div class="bar-track"><div class="bar-fill purple" style="width:${Math.round(s.count/maxC*100)}%"></div></div><span class="bar-val">${s.count}개</span></div>`).join('')}</div></div>`;}
+  view.innerHTML=bigStats+heatmap+routineReportHtml+failHtml+projHtml+monthChart+dowChart+timePatternHtml+rankHtml;
 }
 
 function calcMaxStreak(history){
@@ -1640,42 +1653,64 @@ const TT_SLOTS=[
   {key:'18-20',label:'18–20시',period:'eve'},
   {key:'20-22',label:'20–22시',period:'eve'},
 ];
+function editTaskTime(e,i){
+  e.stopPropagation();
+  const row=document.getElementById('task-row-'+i);
+  if(!row)return;
+  const existing=row.querySelector('.task-time-edit');
+  if(existing){existing.remove();return;}
+  const t=D.tasks[i];
+  const form=document.createElement('div');
+  form.className='task-time-edit';
+  form.style.cssText='display:flex;align-items:center;gap:4px;margin-top:6px;flex-wrap:wrap;width:100%';
+  form.innerHTML=`<input type="time" id="ttS${i}" value="${t.startTime||''}" style="width:90px;padding:3px 6px;border:1.5px solid var(--purple);border-radius:6px;font-size:12px;font-family:inherit;outline:none"><span style="font-size:12px;color:var(--text3)">–</span><input type="time" id="ttE${i}" value="${t.endTime||''}" style="width:90px;padding:3px 6px;border:1.5px solid var(--purple);border-radius:6px;font-size:12px;font-family:inherit;outline:none"><button onclick="saveTaskTime(${i})" style="padding:3px 10px;background:var(--purple);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">확인</button><button onclick="clearTaskTime(${i})" style="padding:3px 8px;background:none;border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;color:var(--text3);font-family:inherit">삭제</button>`;
+  row.style.flexWrap='wrap';
+  row.appendChild(form);
+  document.getElementById('ttS'+i).focus();
+}
+function saveTaskTime(i){
+  const s=document.getElementById('ttS'+i)?.value||'';
+  const e=document.getElementById('ttE'+i)?.value||'';
+  D.tasks[i].startTime=s||null;
+  D.tasks[i].endTime=e||null;
+  save();renderTasks();renderTimetable();
+}
+function clearTaskTime(i){
+  D.tasks[i].startTime=null;
+  D.tasks[i].endTime=null;
+  save();renderTasks();renderTimetable();
+}
 function renderTimetable(){
-  if(!D.timetable)D.timetable={};
+  function slotKey(st){
+    if(!st)return null;
+    const h=parseInt(st.split(':')[0],10);
+    const s=TT_SLOTS.find(sl=>{const[sh,eh]=sl.key.split('-').map(Number);return h>=sh&&h<eh;});
+    return s?s.key:null;
+  }
+  const timed=(D.tasks||[]).filter(t=>!t.done&&t.startTime);
   const periods={am:[],pm:[],eve:[]};
   TT_SLOTS.forEach(s=>periods[s.period].push(s));
   ['am','pm','eve'].forEach(period=>{
     const c=document.getElementById(`ttSlots-${period}`);
     if(!c)return;
     c.innerHTML=periods[period].map(slot=>{
-      const task=(D.timetable||{})[slot.key]||'';
-      return `<div class="tt-slot"><div class="tt-time">${slot.label}</div><div class="tt-content" onclick="editTtSlot('${slot.key}')"><div class="tt-task${task?'':' empty'}" id="ttTask-${slot.key}">${task?esc(task):'비어있음'}</div><input class="tt-input" id="ttInput-${slot.key}" style="display:none" onblur="saveTtSlot('${slot.key}')" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value='';this.blur()}"/></div>${task?`<button class="tt-del" onclick="event.stopPropagation();clearTtSlot('${slot.key}')">✕</button>`:''}</div>`;
+      const slotTasks=timed.filter(t=>slotKey(t.startTime)===slot.key).sort((a,b)=>a.startTime.localeCompare(b.startTime));
+      const taskHtml=slotTasks.length
+        ?slotTasks.map(t=>`<div class="tt-task-item"><span class="tt-task-time">${t.startTime}${t.endTime?'–'+t.endTime:''}</span><span class="tt-task-name">${esc(t.text)}</span></div>`).join('')
+        :`<span class="tt-empty-slot">비어있음</span>`;
+      return `<div class="tt-slot"><div class="tt-time">${slot.label}</div><div class="tt-content">${taskHtml}</div></div>`;
     }).join('');
   });
-}
-function editTtSlot(key){
-  const task=document.getElementById(`ttTask-${key}`);
-  const inp=document.getElementById(`ttInput-${key}`);
-  if(!task||!inp)return;
-  task.style.display='none';
-  inp.style.display='block';
-  inp.value=(D.timetable||{})[key]||'';
-  inp.focus();
-  inp.select();
-}
-function saveTtSlot(key){
-  const inp=document.getElementById(`ttInput-${key}`);
-  if(!inp)return;
-  if(!D.timetable)D.timetable={};
-  const v=inp.value.trim();
-  if(v)D.timetable[key]=v;
-  else delete D.timetable[key];
-  save();renderTimetable();
-}
-function clearTtSlot(key){
-  if(!D.timetable)return;
-  delete D.timetable[key];
-  save();renderTimetable();
+  const unschEl=document.getElementById('ttUnscheduled');
+  if(unschEl){
+    const unsch=(D.tasks||[]).filter(t=>!t.done&&!t.startTime);
+    if(unsch.length){
+      unschEl.style.display='block';
+      unschEl.innerHTML=`<div class="tt-section-lbl" style="margin-top:10px">시간 미정</div>`+unsch.map(t=>`<div class="tt-slot"><div class="tt-time" style="color:var(--text3)">미정</div><div class="tt-content"><span style="font-size:13px;color:var(--text2)">${esc(t.text)}</span></div></div>`).join('');
+    }else{
+      unschEl.style.display='none';
+    }
+  }
 }
 
 function switchTab(name){
@@ -1705,6 +1740,7 @@ function showDayDetail(ds){
     ${done.length?`<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">완료한 할 일</div>${done.map(t=>`<div style="font-size:13px;padding:4px 0;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--surface2)"><span>✅ ${esc(t.text)}</span>${t.timeSpent?`<span style="font-size:11px;color:var(--text3);margin-left:auto">${fmtMin(t.timeSpent)}</span>`:''}</div>`).join('')}</div>`:''}
     ${undone.length?`<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">미완료</div>${undone.map(t=>`<div style="font-size:13px;padding:4px 0;color:var(--text3);border-bottom:1px solid var(--surface2)">⬜ ${esc(t.text)}</div>`).join('')}</div>`:''}
     ${rfl?`<div style="padding:10px 12px;background:var(--surface2);border-radius:8px"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">회고</div><div style="font-size:13px;color:var(--text2)">${RATE_EMOJIS[rfl.rate]||''}${rfl.reasons&&rfl.reasons.length?' · '+rfl.reasons.join(', '):''}</div>${rfl.note?`<div style="font-size:13px;color:var(--text);margin-top:6px;line-height:1.6">💬 ${esc(rfl.note)}</div>`:''}</div>`:''}
+    ${(()=>{const tt=(h.tasks||[]).filter(t=>t.startTime).sort((a,b)=>a.startTime.localeCompare(b.startTime));return tt.length?`<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">타임테이블</div>${tt.map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--surface2)"><span style="font-size:10px;font-weight:700;color:var(--purple);min-width:78px;flex-shrink:0">${t.startTime}${t.endTime?'–'+t.endTime:''}</span><span style="font-size:13px;${t.done?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.text)}</span></div>`).join('')}</div>`:'';})()}
   `;
   document.getElementById('dayDetailOverlay').style.display='flex';
 }
