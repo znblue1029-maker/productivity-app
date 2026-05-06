@@ -283,6 +283,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .brain-sel-btn.p1{background:var(--purple);border-color:var(--purple);color:white}
 .brain-sel-btn.p2{background:#7F77DD;border-color:#7F77DD;color:white}
 .brain-sel-btn.p3{background:#a49fd6;border-color:#a49fd6;color:white}
+.task-prio-badge{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;flex-shrink:0}
+.task-prio-badge.p1{background:var(--purple)}
+.task-prio-badge.p2{background:#7F77DD}
+.task-prio-badge.p3{background:#a49fd6}
 .brain-item-text{flex:1;font-size:13px;line-height:1.4}
 .brain-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 3px;flex-shrink:0;line-height:1}
 /* Timetable */
@@ -403,17 +407,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       </div>
       <div id="brainItemList"></div>
     </div>
-    <div class="card">
-      <div class="card-label">오늘의 단 하나의 집중</div>
-      <div id="focus-show">
-        <div class="focus-display" id="focusDisplay">오늘의 집중을 선언해보세요</div>
-        <button class="focus-edit-btn" onclick="editFocus()">✏️ 수정</button>
-      </div>
-      <div id="focus-edit" style="display:none">
-        <textarea class="focus-textarea" id="focusInput" rows="2" placeholder="오늘 반드시 해낼 단 하나는?"></textarea>
-        <button class="declare-btn" onclick="saveFocus()">🎯 선언하기</button>
-      </div>
-    </div>
     <!-- 나의 루틴 -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -434,28 +427,12 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div id="routineList"></div>
     </div>
     <div class="card">
-      <div class="card-label">할 일</div>
+      <div class="card-label">오늘의 할 일</div>
       <div id="taskList"></div>
       <div class="progress-bar-wrap" id="progressRow" style="display:none">
         <span style="font-size:12px;color:var(--text2)" id="progText">0/0</span>
         <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
         <span style="font-size:12px;color:var(--text2)" id="progPct">0%</span>
-      </div>
-      <div class="task-add-area">
-        <div class="task-add-top">
-          <input type="text" id="taskInput" placeholder="할 일 입력" onkeydown="if(event.key==='Enter'&&!event.isComposing)addTask()"/>
-          <select id="taskProjSelect" style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;background:var(--surface2);color:var(--text);outline:none;max-width:110px">
-            <option value="">프로젝트 없음</option>
-          </select>
-          <button class="btn-secondary" onclick="aiBreakdown()" id="aiBreakBtn">🤖 쪼개기</button>
-          <button class="btn-primary" onclick="addTask()">추가</button>
-        </div>
-        <div class="ai-breakdown" id="aiBreakdown">
-          <div class="ai-breakdown-title">🤖 AI가 쪼갠 실행 단위</div>
-          <div id="aiBreakList"></div>
-          <button class="ai-add-all" onclick="addAllAiTasks()">전부 추가하기</button>
-        </div>
-        <div class="hint">💡 프로젝트를 선택하면 할 일이 연결돼요</div>
       </div>
     </div>
     <!-- 타임테이블 -->
@@ -707,13 +684,16 @@ function render(){
   const d=new Date();const days=['일','월','화','수','목','금','토'];
   document.getElementById('todayDate').textContent=`${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
   document.getElementById('streakNum').textContent=D.streak;
-  renderFocus();renderRoutines();renderTasks();renderIdeas();updateTodayStats();renderTodayRefl();renderBrainDump();renderTimetable();
+  renderRoutines();renderTasks();renderIdeas();updateTodayStats();renderTodayRefl();renderBrainDump();renderTimetable();
 }
 
 // Focus
 function renderFocus(){
-  if(D.todayFocus){document.getElementById('focusDisplay').textContent=D.todayFocus;document.getElementById('focus-show').style.display='block';document.getElementById('focus-edit').style.display='none';}
-  else{document.getElementById('focus-show').style.display='none';document.getElementById('focus-edit').style.display='block';}
+  const show=document.getElementById('focus-show');
+  const edit=document.getElementById('focus-edit');
+  if(!show||!edit)return;
+  if(D.todayFocus){show.style.display='block';edit.style.display='none';document.getElementById('focusDisplay').textContent=D.todayFocus;}
+  else{show.style.display='none';edit.style.display='block';}
 }
 function editFocus(){document.getElementById('focus-show').style.display='none';document.getElementById('focus-edit').style.display='block';document.getElementById('focusInput').value=D.todayFocus;document.getElementById('focusInput').focus();}
 function saveFocus(){const v=document.getElementById('focusInput').value.trim();if(!v)return;D.todayFocus=v;updateStreak();save();renderFocus();}
@@ -728,7 +708,7 @@ function updateStreak(){
 // Tasks
 function renderTasks(){
   const tasks=D.tasks||[];const pr=document.getElementById('progressRow');const list=document.getElementById('taskList');
-  if(!tasks.length){list.innerHTML='<div class="empty">할 일을 추가하거나 🤖 쪼개기를 눌러보세요!</div>';pr.style.display='none';renderTimeLog();return;}
+  if(!tasks.length){list.innerHTML='<div class="empty">브레인 덤프에서 우선순위 3개를 선택하면 여기에 할 일이 표시돼요</div>';pr.style.display='none';renderTimeLog();return;}
   const done=tasks.filter(t=>t.done).length;const pct=Math.round(done/tasks.length*100);
   pr.style.display='flex';
   document.getElementById('progText').textContent=`${done}/${tasks.length}`;
@@ -742,7 +722,10 @@ function renderTasks(){
     const proj=t.projId?(D.projects||[]).find(p=>p.id===t.projId):null;
     const tag=proj?`<span class="task-proj-tag" style="background:${proj.color}22;color:${proj.color}">${esc(proj.name)}</span>`:'';
     const carried=t.carriedOver?`<span class="carryover-badge">↩이월</span>`:'';
+    const prioNum=t.brainId?(D.priorities||[]).indexOf(t.brainId)+1:0;
+    const prioBadge=prioNum>0?`<div class="task-prio-badge p${prioNum}">${prioNum}</div>`:'';
     return `<div class="task-row" id="task-row-${i}">
+      ${prioBadge}
       <div class="chk ${t.done?'done':''}" onclick="toggleTask(${i})"></div>
       <span class="task-txt ${t.done?'done':''}" ondblclick="editTask(${i})">${esc(t.text)}</span>
       ${carried}${tag}
@@ -797,7 +780,17 @@ function toggleTask(i){
   saveDayHistory(Math.round(done/D.tasks.length*100));
   save();renderTasks();updateTodayStats();updateProjProgress();
 }
-function deleteTask(i){if(activeTimer.taskIdx===i)flushTimer();D.tasks.splice(i,1);save();renderTasks();updateProjProgress();}
+function deleteTask(i){
+  if(activeTimer.taskIdx===i)flushTimer();
+  const task=D.tasks[i];
+  if(task&&task.brainId){
+    D.priorities=(D.priorities||[]).filter(pid=>pid!==task.brainId);
+    const firstPrio=(D.priorities.length>0)?(D.brainItems||[]).find(x=>x.id===D.priorities[0]):null;
+    D.todayFocus=firstPrio?firstPrio.text:'';
+  }
+  D.tasks.splice(i,1);
+  save();renderTasks();renderBrainDump();updateProjProgress();
+}
 function editTask(i){
   const row=document.getElementById('task-row-'+i);if(!row)return;
   const span=row.querySelector('.task-txt');if(!span)return;
@@ -811,8 +804,15 @@ function editTask(i){
 }
 function saveTaskEdit(i,inp){
   const v=inp.value.trim();
-  if(v&&v!==D.tasks[i].text){D.tasks[i].text=v;save();}
-  renderTasks();
+  if(v&&v!==D.tasks[i].text){
+    D.tasks[i].text=v;
+    if(D.tasks[i].brainId){
+      const bi=(D.brainItems||[]).find(x=>x.id===D.tasks[i].brainId);
+      if(bi)bi.text=v;
+    }
+    save();
+  }
+  renderTasks();renderBrainDump();
 }
 
 function saveDayHistory(pct,dateStr){
@@ -1564,20 +1564,45 @@ function addBrainItem(){
   renderBrainDump();
 }
 function deleteBrainItem(id){
+  const taskIdx=(D.tasks||[]).findIndex(t=>t.brainId===id);
+  if(taskIdx>=0){
+    if(activeTimer.taskIdx===taskIdx)flushTimer();
+    else if(activeTimer.taskIdx!==null&&activeTimer.taskIdx>taskIdx)activeTimer.taskIdx--;
+    if(focusState.taskIdx===taskIdx)stopFocus();
+    else if(focusState.taskIdx!==null&&focusState.taskIdx>taskIdx)focusState.taskIdx--;
+    D.tasks.splice(taskIdx,1);
+  }
   D.brainItems=(D.brainItems||[]).filter(it=>it.id!==id);
   D.priorities=(D.priorities||[]).filter(pid=>pid!==id);
-  save();renderBrainDump();
+  const firstPrio=(D.priorities.length>0)?(D.brainItems||[]).find(x=>x.id===D.priorities[0]):null;
+  D.todayFocus=firstPrio?firstPrio.text:'';
+  save();renderBrainDump();renderTasks();
 }
 function togglePriority(id){
   if(!D.priorities)D.priorities=[];
   const idx=D.priorities.indexOf(id);
   if(idx>=0){
     D.priorities.splice(idx,1);
+    const taskIdx=(D.tasks||[]).findIndex(t=>t.brainId===id);
+    if(taskIdx>=0){
+      if(activeTimer.taskIdx===taskIdx)flushTimer();
+      else if(activeTimer.taskIdx!==null&&activeTimer.taskIdx>taskIdx)activeTimer.taskIdx--;
+      if(focusState.taskIdx===taskIdx)stopFocus();
+      else if(focusState.taskIdx!==null&&focusState.taskIdx>taskIdx)focusState.taskIdx--;
+      D.tasks.splice(taskIdx,1);
+    }
   }else{
     if(D.priorities.length>=3){toast('우선순위는 최대 3개까지 선택할 수 있어요');return;}
     D.priorities.push(id);
+    const item=(D.brainItems||[]).find(x=>x.id===id);
+    if(item){
+      if(!D.tasks)D.tasks=[];
+      D.tasks.push({text:item.text,done:false,timeSpent:0,addedDate:today(),brainId:id});
+    }
   }
-  save();renderBrainDump();
+  const firstPrio=(D.priorities.length>0)?(D.brainItems||[]).find(x=>x.id===D.priorities[0]):null;
+  D.todayFocus=firstPrio?firstPrio.text:'';
+  save();renderBrainDump();renderTasks();
 }
 function renderBrainDump(){
   const items=D.brainItems||[];
