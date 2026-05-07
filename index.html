@@ -682,6 +682,7 @@ function load(){
   try{initFirebase(FIREBASE_CONFIG,true);}catch(e){console.error('initFirebase error',e);}
 }
 function save(){D._ts=Date.now();try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}scheduleAutoSave();fbSave();}
+function saveQuiet(){try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}scheduleAutoSave();}
 
 function checkStreak(){
   const yest=yesterday();
@@ -951,7 +952,7 @@ function checkDayReset(){
   activeTimer={taskIdx:null,startTime:null};
   focusState={taskIdx:null,phase:'idle',remaining:0,total:0,elapsed:0};
   if(incomplete.length){pendingCarryover=incomplete;}
-  else{save();render();}
+  else{saveQuiet();render();}
 }
 function showCarryoverModal(){
   renderCarryoverList();
@@ -1547,11 +1548,18 @@ async function startFbSync(){
       if((remote._ts||0)>(D._ts||0)){
         const{_devId,...data}=remote;
         D={...data};
-        localStorage.setItem(SK,JSON.stringify(D));
+        // 모달이 열려있으면 닫고, 다운로드 데이터 기준으로 날짜 리셋 재적용
+        pendingCarryover=[];
+        document.getElementById('dayResetOverlay').classList.remove('show');
+        checkDayReset();
+        save();
+        if(pendingCarryover.length)showCarryoverModal();
         render();renderProjects();renderGrowth();renderReport();
         toast('최신 데이터를 불러왔어요 ✅');
+      }else{
+        fbSave();  // 로컬이 최신 → Firebase에 업로드
       }
-    }else{fbSave();}
+    }else{save();}
   }catch(e){}
   if(fbUnsub)fbUnsub();
   fbUnsub=ref.onSnapshot(snap=>{
@@ -1574,8 +1582,25 @@ function renderFirebaseUI(){
     el.innerHTML=`<button onclick="signInGoogle()" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border:1px solid #4285F4;border-radius:8px;background:#EEF3FF;color:#4285F4;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap">G 로그인</button>`;
   }else{
     const img=fbUser.photoURL?`<img src="${fbUser.photoURL}" style="width:22px;height:22px;border-radius:50%;flex-shrink:0">`:'';
-    el.innerHTML=`<div style="display:flex;align-items:center;gap:7px">${img}<span style="font-size:12px;color:var(--green);font-weight:500">☁ 동기화 중</span><button onclick="fbSignOut()" style="font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:inherit;padding:2px 7px">로그아웃</button></div>`;
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:7px">${img}<span style="font-size:12px;color:var(--green);font-weight:500">☁ 동기화 중</span><button onclick="forceSync()" title="강제 동기화" style="font-size:13px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:inherit;padding:2px 6px">↻</button><button onclick="fbSignOut()" style="font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:inherit;padding:2px 7px">로그아웃</button></div>`;
   }
+}
+function forceSync(){
+  if(!fbUser||!fbDb){toast('먼저 Google 로그인을 해주세요');return;}
+  const ref=fbDb.collection('users').doc(fbUser.uid);
+  toast('동기화 중...');
+  ref.get().then(snap=>{
+    if(!snap.exists){fbSave();toast('Firebase에 데이터가 없어요. 현재 기기 데이터를 업로드했어요');return;}
+    const{_devId,...data}=snap.data();
+    D={...data};
+    pendingCarryover=[];
+    document.getElementById('dayResetOverlay').classList.remove('show');
+    checkDayReset();
+    save();
+    if(pendingCarryover.length)showCarryoverModal();
+    render();renderProjects();renderGrowth();renderReport();
+    toast('최신 데이터를 불러왔어요 ✅');
+  }).catch(e=>toast('동기화 실패: '+e.message));
 }
 
 function saveFbConfig(){
@@ -1794,7 +1819,7 @@ load();
 
 function _autoCheckDayReset(){
   if(D.lastTaskDate&&D.lastTaskDate!==today()){
-    checkStreak();checkDayReset();render();renderFirebaseUI();
+    checkStreak();checkDayReset();save();render();renderFirebaseUI();
     if(pendingCarryover.length)showCarryoverModal();
   }
 }
