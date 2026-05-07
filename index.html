@@ -675,11 +675,11 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 
 function load(){
   try{const s=localStorage.getItem(SK);if(s)D=JSON.parse(s)}catch(e){}
-  checkStreak();checkDayReset();
-  initColorPicker();render();updateProjSelect();restoreAutoSave();
+  try{checkStreak();checkDayReset();}catch(e){console.error('checkDayReset error',e);}
+  try{initColorPicker();render();updateProjSelect();restoreAutoSave();}catch(e){console.error('render error',e);}
   if(pendingCarryover.length)showCarryoverModal();
   renderFirebaseUI();
-  try{initFirebase(FIREBASE_CONFIG,true);}catch(e){}
+  try{initFirebase(FIREBASE_CONFIG,true);}catch(e){console.error('initFirebase error',e);}
 }
 function save(){D._ts=Date.now();try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}scheduleAutoSave();fbSave();}
 
@@ -1570,9 +1570,7 @@ async function startFbSync(){
 
 function renderFirebaseUI(){
   const el=document.getElementById('fbStatus');if(!el)return;
-  if(!fbApp){
-    el.innerHTML=`<span style="font-size:12px;color:var(--text3)">⏳ Firebase 연결 중...</span>`;
-  }else if(!fbUser){
+  if(!fbUser){
     el.innerHTML=`<button onclick="signInGoogle()" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border:1px solid #4285F4;border-radius:8px;background:#EEF3FF;color:#4285F4;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap">G 로그인</button>`;
   }else{
     const img=fbUser.photoURL?`<img src="${fbUser.photoURL}" style="width:22px;height:22px;border-radius:50%;flex-shrink:0">`:'';
@@ -1796,7 +1794,7 @@ load();
 
 function _autoCheckDayReset(){
   if(D.lastTaskDate&&D.lastTaskDate!==today()){
-    checkStreak();checkDayReset();render();
+    checkStreak();checkDayReset();render();renderFirebaseUI();
     if(pendingCarryover.length)showCarryoverModal();
   }
 }
