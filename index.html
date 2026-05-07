@@ -247,10 +247,12 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .day-reset-card{background:var(--surface);border-radius:16px;padding:1.5rem;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(83,74,183,0.2)}
 .day-reset-title{font-size:17px;font-weight:700;margin-bottom:6px}
 .day-reset-sub{font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6}
-.carry-task-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--surface2)}
+.carry-task-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--surface2)}
 .carry-task-row:last-child{border-bottom:none}
-.carry-chk{width:18px;height:18px;border-radius:4px;cursor:pointer;accent-color:var(--purple);flex-shrink:0}
-.carry-task-txt{flex:1;font-size:13px;color:var(--text);cursor:pointer}
+.carry-task-txt{flex:1;font-size:13px;color:var(--text)}
+.carry-row-btns{display:flex;gap:6px;flex-shrink:0}
+.carry-yes-btn{font-size:11px;padding:4px 9px;border-radius:6px;border:none;background:var(--purple);color:white;cursor:pointer;font-family:inherit;font-weight:600;white-space:nowrap}
+.carry-no-btn{font-size:11px;padding:4px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap}
 .carry-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 /* Completed tasks section */
 .done-section-label{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;padding:10px 0 4px;border-top:1px solid var(--border);margin-top:4px}
@@ -332,11 +334,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 <div class="day-reset-overlay" id="dayResetOverlay">
   <div class="day-reset-card">
     <div class="day-reset-title">🌅 새로운 하루!</div>
-    <div class="day-reset-sub">어제 미완료한 할 일이 있어요.<br>오늘로 넘길 것을 선택해주세요.</div>
+    <div class="day-reset-sub">어제 못 다한 일이 있어요.</div>
     <div id="carryTaskList"></div>
     <div class="carry-actions">
-      <button class="btn-primary" style="flex:1" onclick="carryoverSelected()">선택한 것 오늘로 넘기기</button>
-      <button class="btn-secondary" onclick="startFresh()">새로 시작</button>
+      <button class="btn-secondary" style="flex:1" onclick="dismissAllCarryover()">모두 취소</button>
     </div>
   </div>
 </div>
@@ -944,6 +945,8 @@ function checkDayReset(){
   D.todayFocus='';
   D.todayFlowSessions=0;
   D.tasks=[];
+  D.brainItems=[];
+  D.priorities=[];
   D.lastTaskDate=t;
   activeTimer={taskIdx:null,startTime:null};
   focusState={taskIdx:null,phase:'idle',remaining:0,total:0,elapsed:0};
@@ -951,26 +954,40 @@ function checkDayReset(){
   else{save();render();}
 }
 function showCarryoverModal(){
-  document.getElementById('carryTaskList').innerHTML=pendingCarryover.map((t,i)=>`
-    <div class="carry-task-row">
-      <input type="checkbox" class="carry-chk" id="carry_${i}" checked>
-      <label class="carry-task-txt" for="carry_${i}">${esc(t.text)}</label>
-    </div>`).join('');
+  renderCarryoverList();
   document.getElementById('dayResetOverlay').classList.add('show');
 }
-function carryoverSelected(){
-  const selected=pendingCarryover.filter((_,i)=>document.getElementById(`carry_${i}`)?.checked);
-  D.tasks=selected.map(t=>({...t,addedDate:today(),timeSpent:0,carriedOver:true}));
+function renderCarryoverList(){
+  document.getElementById('carryTaskList').innerHTML=pendingCarryover.map((t,i)=>`
+    <div class="carry-task-row" id="carry-row-${i}">
+      <span class="carry-task-txt">${esc(t.text)}</span>
+      <div class="carry-row-btns">
+        <button class="carry-yes-btn" onclick="carryoverOne(${i})">오늘로 이어하기</button>
+        <button class="carry-no-btn" onclick="dismissOne(${i})">취소</button>
+      </div>
+    </div>`).join('');
+}
+function carryoverOne(i){
+  const task=pendingCarryover[i];
+  D.tasks.push({...task,addedDate:today(),timeSpent:0,carriedOver:true});
+  pendingCarryover.splice(i,1);
+  if(!pendingCarryover.length){closeCarryoverModal();toast('오늘 할 일 목록에 반영됐어요!');}
+  else{renderCarryoverList();}
+}
+function dismissOne(i){
+  pendingCarryover.splice(i,1);
+  if(!pendingCarryover.length){closeCarryoverModal();}
+  else{renderCarryoverList();}
+}
+function dismissAllCarryover(){
+  pendingCarryover=[];
+  closeCarryoverModal();
+  toast('새롭게 시작해요! 💪');
+}
+function closeCarryoverModal(){
   pendingCarryover=[];
   document.getElementById('dayResetOverlay').classList.remove('show');
   save();render();updateProjSelect();
-  if(selected.length)toast(`${selected.length}개 할 일을 오늘로 넘겼어요!`);
-  else toast('새롭게 시작해요! 💪');
-}
-function startFresh(){
-  D.tasks=[];pendingCarryover=[];
-  document.getElementById('dayResetOverlay').classList.remove('show');
-  save();render();toast('새롭게 시작해요! 💪');
 }
 
 // AI Breakdown
